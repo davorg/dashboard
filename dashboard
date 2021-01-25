@@ -10,6 +10,7 @@ use Template;
 use MetaCPAN::Client;
 use URI;
 use FindBin '$RealBin';
+use Pithub;
 
 my $global_cfg = decode_json(path('dashboard.json')->slurp);
 
@@ -73,13 +74,15 @@ sub do_author {
 
   my $cfg = decode_json(path($file)->slurp);
 
+  my $ph = Pithub->new;
+
   $cfg->{modules} = [];
 
   my $mcpan    = MetaCPAN::Client->new;
   my $author   = $mcpan->author($cfg->{author}{cpan});
   my $releases = $author->releases;
 
-  $cfg->{author}{gravatar}     = $author->gravatar_url;
+  $cfg->{author}{gravatar} = $author->gravatar_url;
   $cfg->{author}{name} = $author->name;
 
   while ( my $rel = $releases->next ) {
@@ -120,6 +123,17 @@ sub do_author {
       next;
     }
     $mod->{insecure_repo} = $mod->{repo} =~ m|^http:|;
+
+    my $ph_resp = $ph->repos->get(
+      user => $mod->{repo_owner},
+      repo => $mod->{repo_name},
+    );
+
+use Data::Dumper;
+warn "$mod->{repo_owner}/$mod->{repo_name} ->\n", Dumper($ph_resp->content), "\n";
+
+    $mod->{default_branch} = $ph_resp->content->{default_branch};
+
     push @{ $cfg->{modules} }, $mod;
   }
 
@@ -198,8 +212,8 @@ sub travis_badge_link {
   my ($module) = @_;
 
   return badge_link(
-    "https://travis-ci.org/$module->{repo_owner}/$module->{repo_name}?branch=master",
-    "https://travis-ci.org/$module->{repo_owner}/$module->{repo_name}.svg?branch=master",
+    "https://travis-ci.org/$module->{repo_owner}/$module->{repo_name}?branch=$module->{default_branch}",
+    "https://travis-ci.org/$module->{repo_owner}/$module->{repo_name}.svg?branch=$module->{default_branch}",
     "Build status for $module->{dist}",
   );
 }
@@ -214,8 +228,8 @@ sub coveralls_badge_link {
   my ($module, $author) = @_;
 
   return badge_link(
-    "https://coveralls.io/github/$author->{github}/$module->{repo_name}?branch=master",
-    "https://coveralls.io/repos/$author->{github}/$module->{repo_name}/badge.svg?branch=master&service=github",
+    "https://coveralls.io/github/$author->{github}/$module->{repo_name}?branch=$module->{default_branch}",
+    "https://coveralls.io/repos/$author->{github}/$module->{repo_name}/badge.svg?branch=$module->{default_branch}&service=github",
     "Test coverage for $module->{dist}",
   );
 }
@@ -225,7 +239,7 @@ sub codecov_badge_link {
 
   return badge_link(
     "https://codecov.io/gh/$module->{repo_owner}/$module->{repo_name}",
-    "https://codecov.io/gh/$module->{repo_owner}/$module->{repo_name}/branch/master/graph/badge.svg",
+    "https://codecov.io/gh/$module->{repo_owner}/$module->{repo_name}/branch/$module->{default_branch}/graph/badge.svg",
     "Test coverage for $module->{dist}",
   );
 }
@@ -235,7 +249,7 @@ sub kritika_badge_link {
 
   return badge_link(
     "https://kritika.io/users/$author->{github}/repos/$module->{repo_owner}+$module->{repo_name}/",
-    "https://kritika.io/users/$author->{github}/repos/$module->{repo_owner}+$module->{repo_name}/heads/master/status.svg",
+    "https://kritika.io/users/$author->{github}/repos/$module->{repo_owner}+$module->{repo_name}/heads/$module->{default_branch}/status.svg",
     "Kritika grade for $module->{dist}",
   );
 }
